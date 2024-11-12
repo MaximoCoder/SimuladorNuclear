@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Reacción Nuclear en Cadena</title>
+    <style>
+        /* Estilo general del cuerpo */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* Contenedor para la simulación y controles */
+        .container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        /* Estilo para la sección de simulación */
+        .simulation {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Estilo para el canvas donde se dibujan las partículas */
+        canvas {
+            border: 2px solid #333;
+            background-color: #1a1a1a;
+            border-radius: 8px;
+        }
+
+        /* Estilo para los controles de la simulación */
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Agrupación de controles */
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Estilo para los botones */
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #45a049;
+            /* Color más oscuro al pasar el ratón */
+        }
+
+        button#reset {
+            background: #f44336;
+            /* Color rojo para el botón de reinicio */
+        }
+
+        button#reset:hover {
+            background: #da190b;
+            /* Color más oscuro al pasar el ratón */
+        }
+
+        input[type="range"] {
+            width: 200px;
+            /* Ancho del control deslizante */
+        }
+
+        /* Estilo para la leyenda de colores */
+        .legend {
+            display: flex;
+            gap: 15px;
+            margin: 10px 0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Simulador de Reacción Nuclear en Cadena</h1>
+    <div class="container">
+        <div class="simulation">
+            <canvas id="canvas" width="600" height="400"></canvas> <!-- Área de dibujo -->
+
+            <div class="controls">
+                <div class="control-group">
+                    <!-- Botones para añadir núcleo, disparar neutrón y reiniciar -->
+                    <button id="addNucleus">Añadir Núcleo</button>
+                    <button id="shoot">Disparar Neutrón</button>
+                    <button id="reset">Reiniciar</button>
+                </div>
+                <div class="control-group">
+                    <!-- Control deslizante para ajustar la velocidad del neutrón -->
+                    <label for="speed">Velocidad del Neutrón:</label>
+                    <input id="speed" type="range" min="1" max="10" step="1" value="5">
+                    <span id="speedValue">5</span> <!-- Muestra el valor actual de velocidad -->
+                </div>
+                <!-- Leyenda que muestra los colores asociados a cada tipo de partícula -->
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #00ff00"></div>
+                        <span>Neutrón</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ff4500"></div>
+                        <span>Uranio-235</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ffd700"></div>
+                        <span>Fragmentos</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas'); // Selecciona el canvas
+        const ctx = canvas.getContext('2d'); // Obtiene el contexto de dibujo en 2D
+        const speedDisplay = document.getElementById('speedValue'); // Muestra la velocidad del neutrón
+        let particles = []; // Array para almacenar las partículas
+        let trails = []; // Array para las estelas dejadas por las partículas
+
+
+        // Función para disparar un neutrón en dirección al ratón
+        function shootNeutron() {
+            const speed = parseFloat(document.getElementById('speed').value); // Obtiene la velocidad del input
+            speedDisplay.textContent = speed; // Actualiza el valor mostrado
+            // Crea un nuevo neutrón con velocidad en la dirección calculada
+            particles.push(new Particle(
+                50,
+                canvas.height / 2,
+                'neutron',
+            ));
+        }
+
+        // Clase que representa una partícula en la simulación
+        class Particle {
+            constructor(x, y, type, vx = 0, vy = 0) {
+                this.x = x; // Posición X de la partícula
+                this.y = y; // Posición Y de la partícula
+                this.type = type; // Tipo de partícula (neutrón, uranio, fragmento)
+                this.radius = type === 'uranium' ? 20 : 5; // Radio según el tipo
+                this.vx = vx; // Velocidad en X
+                this.vy = vy; // Velocidad en Y
+                this.active = true; // Indica si la partícula está activa
+                this.vibrating = false; // Indica si está vibrando
+                this.vibrationFrames = 0; // Contador para frames de vibración
+                this.mass = type === 'uranium' ? 235 : (type === 'neutron' ? 1 : 118); // Masa según el tipo
+                this.energy = 0.5 * this.mass * (vx * vx + vy * vy); // Energía cinética calculada
+            }
+
+            draw() {
+                if (!this.active) return; // Si no está activa, no dibuja
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.getColor();
+                ctx.fill();
+                ctx.closePath();
+
+                if (this.type === 'neutron') {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.x + this.vx * 5, this.y + this.vy * 5);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.stroke();
+                }
+            }
+
+            getColor() {
+                switch (this.type) {
+                    case 'neutron': return '#00ff00'; // Color verde para neutrones
+                    case 'uranium': return '#ff4500'; // Color naranja para uranio
+                    case 'fragment': return '#ffd700'; // Color dorado para fragmentos
+                    default: return '#ffffff'; // Color blanco por defecto
+                }
+            }
+
+            update() {
+                if (!this.active) return;
+
+                if (this.vibrating) {
+                    this.vibrate();
+                } else {
+                    this.x += this.vx; // Actualiza posición X según velocidad X
+                    this.y += this.vy; // Actualiza posición Y según velocidad Y
+
+                    if (this.type !== 'uranium' && frames % 2 === 0) {
+                        trails.push({ x: this.x, y: this.y, color: this.getColor(), life: 20 });
+                    }
+
+                    // Elimina partículas que salen del canvas
+                    if (this.x < -50 || this.x > canvas.width + 50 || this.y < -50 || this.y > canvas.height + 50) {
+                        this.active = false;
+                    }
+                }
+            }
+
+            vibrate() {
+                if (this.vibrationFrames <= 0) {
+                    this.vibrating = false; return;
+                }
+
+                this.x += Math.random() * 4 - 2; // Vibración aleatoria en X
+                this.y += Math.random() * 4 - 2; // Vibración aleatoria en Y
+                this.vibrationFrames--; // Decrementa contador de vibración
+            }
+        }
+
+        let frames = 0;
+
+        function init() {
+            particles = []; // Reinicia las partículas en cada inicialización
+            trails = [];   // Reinicia las estelas en cada inicialización
+            addNucleus();   // Añade un núcleo al inicio de la simulación
+        }
+
+        function addNucleus() {
+            const x = Math.random() * (canvas.width - 100) + 50; // Genera posición aleatoria X para el núcleo
+            const y = Math.random() * (canvas.height - 100) + 50; // Genera posición aleatoria Y para el núcleo
+
+            particles.push(new Particle(x, y, 'uranium')); // Añade un nuevo núcleo al array de partículas
+        }
+
+        function shootNeutron() {
+            const speed = parseFloat(document.getElementById('speed').value);
+            speedDisplay.textContent = speed;
+
+            particles.push(new Particle(50, canvas.height / 2, 'neutron', speed, 0));
+        }
+
+        function checkCollisions() {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p1 = particles[i];
+                    const p2 = particles[j];
+
+                    if (!p1.active || !p2.active) continue;
+
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < p1.radius + p2.radius) {
+                        if ((p1.type === 'neutron' && p2.type === 'uranium') || (p2.type === 'neutron' && p1.type === 'uranium')) {
+                            const uranium = p1.type === 'uranium' ? p1 : p2;
+                            const neutron = p1.type === 'neutron' ? p1 : p2;
+
+                            triggerCollision(uranium, neutron);
+                        } else if ((p1.type === 'fragment' && p2.type === 'uranium') || (p2.type === 'fragment' && p1.type === 'uranium')) {
+                            const uranium = p1.type === 'uranium' ? p1 : p2;
+                            const fragment = p1.type === 'fragment' ? p1 : p2;
+
+                            triggerCollision(uranium, fragment);
+                        }
+                    }
+                }
+            }
+        }
+
+        function triggerCollision(uranium, projectile) {
+            const totalEnergy = uranium.energy + projectile.energy;
+
+            uranium.vibrating = true;
+            uranium.vibrationFrames = 30;
+
+            projectile.active = false;
+
+            setTimeout(() => {
+                uranium.active = false;
+
+                createFragments(uranium.x, uranium.y, totalEnergy);
+            }, 500);
+        }
+
+        function createFragments(x, y, initialEnergy) {
+            const fragmentCount = 3;
+
+            const energyPerFragment = initialEnergy / fragmentCount + 200;
+
+            for (let i = 0; i < fragmentCount; i++) {
+                const angle = (Math.PI * 2 * i) / fragmentCount;
+
+                const speed = Math.sqrt(2 * energyPerFragment / 118);
+
+                particles.push(new Particle(
+                    x,
+                    y,
+                    'fragment',
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed));
+            }
+        }
+
+        function drawTrails() {
+            ctx.globalAlpha = 0.3;
+
+            trails = trails.filter(trail => {
+                trail.life--;
+
+                if (trail.life > 0) {
+                    ctx.beginPath();
+                    ctx.arc(trail.x, trail.y, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = trail.color;
+
+                    ctx.fill();
+                    ctx.closePath();
+
+                    return true;
+                }
+
+                return false;
+            });
+
+            ctx.globalAlpha = 1.0;
+        }
+
+        function animate() {
+            frames++;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawTrails();
+
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            checkCollisions();
+
+            requestAnimationFrame(animate);
+        }
+
+        document.getElementById('addNucleus').addEventListener('click', addNucleus);
+        document.getElementById('shoot').addEventListener('click', shootNeutron);
+        document.getElementById('reset').addEventListener('click', init);
+        document.getElementById('speed').addEventListener('input', (e) => { speedDisplay.textContent = e.target.value });
+
+        init();   // Inicializa la simulación al cargar la página.
+        animate();   // Inicia el ciclo de animación.
+    </script>
+</body>
+
+</html>
